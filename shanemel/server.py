@@ -34,27 +34,42 @@ class MyWebServer(socketserver.BaseRequestHandler):
     def handle(self):
         self.data = self.request.recv(1024).strip()
         self.data_string = str(self.data, encoding='utf-8') # convert the bytes -> str 
+        print(self.data_string)
         self.data_list = self.data_string.splitlines()
-        file = get_path(self.data_list[0]) 
+        file_path = get_path(self.data_list[0]) 
+        full_path = get_full_path(self.data_list[0])
 
+        # Handle css
+        if ".css" in full_path:
+            cflag,cmsg = check_method_validity(self.data_string)
+            if cflag == 1:
+                self.request.sendall(bytearray(cmsg, 'utf-8'))
+            else:
+                header = getContent(full_path,"css")
+                self.request.sendall(bytearray(header, 'utf-8'))
+                # print("css response done")
+
+        
         flag, msg = check_method_validity(self.data_string)
         if flag == 1:
               self.request.sendall(bytearray(msg, 'utf-8'))
+            #   print(full_path, msg)
               return 
-        
-        # Handle css files and html files
-        cssfile = get_path(self.data_list[0])[1:]   # remove /
-        if len(cssfile) > 1:
-            temp = cssfile.split(".")     # get extension
-            if len(temp) >= 2:
-                ext = temp[1]
-                if ext == "css" or "html":
-                    msg = getContent(self.data_string,ext)
-                    self.request.sendall(bytearray(msg, 'utf-8'))
-                 
-        # Passed all filters. Valid path
-        self.request.sendall(bytearray(msg,'utf-8'))
+    
 
+        # The webserver can return index.html from directories (paths that end in /)
+        pattern = r"/$"
+        m = re.findall(pattern,file_path)
+        if len(m) >= 1:
+            # print("changed: ",file_path)
+            full_path = full_path + "index.html"
+            file_path = file_path + "index.html"
+            
+        
+        # Handle html files
+        if ".html" in full_path:
+            msg = getContent(full_path,"html")
+            self.request.sendall(bytearray(msg, 'utf-8'))
 
 def get_path(data):
         """
@@ -64,7 +79,7 @@ def get_path(data):
         return path[1]
 
 def get_full_path(data):
-        return os.getcwd() + "/www/" + get_path(data)
+        return os.getcwd() + "/www" + get_path(data)
 
 def check_method_validity(data):
         """
@@ -83,36 +98,41 @@ def check_method_validity(data):
               error_message =  base + error + "\n"
               return(1, error_message)
         
-        # Check if the path exists
         path = get_full_path(data)
-        print("checking:",path,os.path.exists(path))  
-
+        end_path = get_path(data)
+        print("given path: ",path)
         # Filter the paths that do not use valid ending
-        pattern = r"(.css|.html|/|/deep|/hardcode)$"
-        m = re.findall(pattern, path)
+        pattern2 = r"(.css|.html|/)$"
+        m = re.findall(pattern2, path)
         if len(m) == 0:
-            error = "404 Not Found" 
-            error_message = base + error + "\n"
-            return(1, error_message)
-
+            error = "301 Moved Permanently\n"
+            path += "/"
+            error_message = base + error + "Location: " + path 
+            print("changed", error_message)
+            return (1, error_message)
+        
+        
+        # Check if the path exists
         if not os.path.exists(path):
             error = "404 Not Found" 
             error_message = base + error + "\n"
+            print("\nnot found: ",path)
             return(1, error_message) 
+        print("found: ", path)
         
         return (0, base + "200 Ok" + "\n")   # valid path and method
 
-def getContent(data,type):
+def getContent(path,type):
     """
     Creates the header responses for html and css files. It includes the status code and message along with the content
     type and actual content of the files.
     """
-    path = get_full_path(data)
+    #TODO: add the css and remove duplicate!
     content = ""
     content_type = f'Content-Type: text/{type}; charset=UTF-8\r\n'
     with open(path) as file:
        content = file.read()  
-    msg = "HTTP/1.1 200 Ok\n" + content_type + content + "\n"
+    msg = "HTTP/1.1 200 Ok\r\n" + content_type + "\r\n" + content +"\r\n"
     return msg
     
 
