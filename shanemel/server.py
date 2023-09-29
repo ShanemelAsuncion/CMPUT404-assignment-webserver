@@ -34,7 +34,7 @@ class MyWebServer(socketserver.BaseRequestHandler):
     def handle(self):
         self.data = self.request.recv(1024).strip()
         self.data_string = str(self.data, encoding='utf-8') # convert the bytes -> str 
-        print(self.data_string)
+
         self.data_list = self.data_string.splitlines()
         file_path = get_path(self.data_list[0]) 
         full_path = get_full_path(self.data_list[0])
@@ -47,13 +47,11 @@ class MyWebServer(socketserver.BaseRequestHandler):
             else:
                 header = getContent(full_path,"css")
                 self.request.sendall(bytearray(header, 'utf-8'))
-                # print("css response done")
 
         
         flag, msg = check_method_validity(self.data_string)
         if flag == 1:
               self.request.sendall(bytearray(msg, 'utf-8'))
-            #   print(full_path, msg)
               return 
     
 
@@ -61,7 +59,6 @@ class MyWebServer(socketserver.BaseRequestHandler):
         pattern = r"/$"
         m = re.findall(pattern,file_path)
         if len(m) >= 1:
-            # print("changed: ",file_path)
             full_path = full_path + "index.html"
             file_path = file_path + "index.html"
             
@@ -79,6 +76,9 @@ def get_path(data):
         return path[1]
 
 def get_full_path(data):
+        """
+        Returns the full path of the requested data
+        """
         return os.getcwd() + "/www" + get_path(data)
 
 def check_method_validity(data):
@@ -100,25 +100,23 @@ def check_method_validity(data):
         
         path = get_full_path(data)
         end_path = get_path(data)
-        print("given path: ",path)
+ 
         # Filter the paths that do not use valid ending
+        # If the file path ends with .css or .html or /, then it would have len(m) > 0
         pattern2 = r"(.css|.html|/)$"
         m = re.findall(pattern2, path)
         if len(m) == 0:
-            error = "301 Moved Permanently\n"
-            path += "/"
-            error_message = base + error + "Location: " + path 
-            print("changed", error_message)
+            error = "301 Moved Permanently\r\n"
+            end_path += "/"
+            error_message = base + error + "Location: " + end_path + "\r\n"
             return (1, error_message)
-        
         
         # Check if the path exists
         if not os.path.exists(path):
             error = "404 Not Found" 
             error_message = base + error + "\n"
-            print("\nnot found: ",path)
             return(1, error_message) 
-        print("found: ", path)
+        
         
         return (0, base + "200 Ok" + "\n")   # valid path and method
 
@@ -127,7 +125,6 @@ def getContent(path,type):
     Creates the header responses for html and css files. It includes the status code and message along with the content
     type and actual content of the files.
     """
-    #TODO: add the css and remove duplicate!
     content = ""
     content_type = f'Content-Type: text/{type}; charset=UTF-8\r\n'
     with open(path) as file:
